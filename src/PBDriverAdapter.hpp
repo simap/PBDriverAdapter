@@ -7,7 +7,7 @@
 
 #include <Arduino.h>
 #include <memory>
-
+#include <vector>
 
 typedef struct {
     uint8_t numElements; //0 to disable channel, usually 3 or 4
