@@ -30,6 +30,8 @@ public:
     std::vector<PBChannel> getChannelConfig();
     void show(uint16_t numPixels, std::function<void(uint16_t index, uint8_t rgbw[])> cb);
 private:
+    void write(const uint8_t *buffer, size_t size);
+    void flush();
     unsigned long timer;
     std::unique_ptr<std::vector<PBChannel>> channels;
 };

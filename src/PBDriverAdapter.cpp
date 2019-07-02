@@ -37,8 +37,13 @@ uint32_t crc_update(uint32_t crc, const void *data, size_t data_len) {
 
 
 void PBDriverAdapter::begin(uint32_t uartFrequency) {
-    Serial1.flush();
+    flush();
+#ifdef ESP8266
     Serial1.begin(uartFrequency, SERIAL_8N1, SERIAL_TX_ONLY);
+#endif
+#ifdef ESP32
+    Serial1.begin(uartFrequency, SERIAL_8N1, -1, 23);
+#endif
     timer = micros();
 }
 
@@ -68,37 +73,38 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
 
         uint32_t crc = 0xffffffff;
         header.channel = channel.channelId;
-        Serial1.write((uint8_t *) &header, sizeof(header));
+        write((uint8_t *) &header, sizeof(header));
         crc = crc_update(crc, &header, sizeof(header));
 
         //write the channel header struct
-        Serial1.write((uint8_t *) &channel.header, sizeof(channel.header));
+        write((uint8_t *) &channel.header, sizeof(channel.header));
         crc = crc_update(crc, &channel.header, sizeof(channel.header));
 
         curPixel = channel.startIndex;
         for (int i = 0; i < channel.header.pixels; i++) {
+            memset(rgb, 0, 4);
             cb(curPixel++, rgb);
-            Serial1.write(rgb, channel.header.numElements);
+            write(rgb, channel.header.numElements);
             crc = crc_update(crc, rgb, channel.header.numElements);
             total++;
         }
         crc = crc ^0xffffffff;
-        Serial1.write((uint8_t *) &crc, 4);
+        write((uint8_t *) &crc, 4);
     }
 
-    Serial.print(total);
-    Serial.println(" pixels rendered");
+//    Serial.print(total);
+//    Serial.println(" pixels rendered");
 
     header.channel = 0xff;
     header.recordType = DRAW_ALL;
     uint32_t crc = 0xffffffff;
-    Serial1.write((uint8_t *) &header, sizeof(header));
+    write((uint8_t *) &header, sizeof(header));
     crc = crc_update(crc, &header, sizeof(header));
     crc = crc ^0xffffffff;
-    Serial1.write((uint8_t *) &crc, 4);
+    write((uint8_t *) &crc, 4);
 
     yield();
-    Serial1.flush();
+    flush();
     timer = micros();
 }
 
@@ -108,4 +114,11 @@ void PBDriverAdapter::configureChannels(std::unique_ptr<std::vector<PBChannel>> 
 
 std::vector<PBChannel> PBDriverAdapter::getChannelConfig() {
     return *this->channels;
+}
+
+void PBDriverAdapter::write(const uint8_t *buffer, size_t size) {
+    Serial1.write(buffer, size);
+}
+void PBDriverAdapter::flush() {
+    Serial1.flush();
 }
