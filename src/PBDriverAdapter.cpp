@@ -10,9 +10,33 @@ typedef struct {
     uint8_t recordType; //set channel ws2812 opts+data, draw all
 } PBFrameHeader;
 
-enum {
-    SET_CHANNEL_WS2812 = 1, DRAW_ALL
-} RecordType;
+typedef struct {
+    uint8_t numElements; //0 to disable channel, usually 3 (RGB) or 4 (RGBW)
+    union {
+        struct {
+            uint8_t redi :2, greeni :2, bluei :2, whitei :2; //color orders, data on the line assumed to be RGB or RGBW
+        };
+        uint8_t colorOrders;
+    };
+    uint16_t pixels;
+} PBWS2812Channel;
+
+typedef struct {
+    uint32_t frequency;
+    union {
+        struct {
+            uint8_t redi :2, greeni :2, bluei :2; //color orders, data on the line assumed to be RGB
+        };
+        uint8_t colorOrders;
+    };
+    uint16_t pixels;
+} PBAPA102DataChannel;
+
+typedef struct {
+    uint32_t frequency;
+} PBAPA102ClockChannel;
+
+
 
 
 static const uint32_t crc_table[16] = {
@@ -46,9 +70,17 @@ void PBDriverAdapter::end() {
     Serial1.end();
 }
 
-void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index, uint8_t rgbw[])> cb) {
+void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index, uint8_t rgbw[])> renderCallback,
+                           std::function<void(PBChannel *)> channelSwitchCallback) {
     int curPixel = 0;
-    uint8_t rgb[4];
+    union {
+        uint32_t rgbFrame;
+        uint8_t rgb[4];
+    };
+    union {
+        uint32_t rgbFrameInit;
+        uint8_t rgbFrameInitBytes[4];
+    };
 
     while (micros() - timer < 300)
         yield();
@@ -57,29 +89,64 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         return;
     memset(rgb, 0, 4);
 
-    PBFrameHeader header;
-    memcpy_P(header.magic, F("UPXL"), 4);
-    header.recordType = SET_CHANNEL_WS2812;
+    PBFrameHeader frameHeader;
+    memcpy_P(frameHeader.magic, F("UPXL"), 4);
 
     int total = 0;
     for (auto channel : *channels) {
-        if (!channel.header.numElements)
+        if (!channel.numElements)
             return;
 
         uint32_t crc = 0xffffffff;
-        header.channel = channel.channelId;
-        Serial1.write((uint8_t *) &header, sizeof(header));
-        crc = crc_update(crc, &header, sizeof(header));
+        frameHeader.channel = channel.channelId;
+        frameHeader.recordType = channel.channelType;
+        Serial1.write((uint8_t *) &frameHeader, sizeof(frameHeader));
+        crc = crc_update(crc, &frameHeader, sizeof(frameHeader));
 
-        //write the channel header struct
-        Serial1.write((uint8_t *) &channel.header, sizeof(channel.header));
-        crc = crc_update(crc, &channel.header, sizeof(channel.header));
+        switch (channel.channelType) {
+            case CHANNEL_WS2812: {
+                //write the channel struct
+                PBWS2812Channel pbws2812Channel;
+                pbws2812Channel.numElements = channel.numElements;
+                pbws2812Channel.pixels = channel.pixels;
+                pbws2812Channel.colorOrders = channel.colorOrders;
+                Serial1.write((uint8_t *) &pbws2812Channel, sizeof(pbws2812Channel));
+                crc = crc_update(crc, &pbws2812Channel, sizeof(pbws2812Channel));
+                channelSwitchCallback(&channel);
+                rgbFrameInit = 0; //default to black
+                break;
+            }
+            case CHANNEL_APA102_DATA: {
+                channel.numElements = 4; //fix this to 4 bytes.
+                PBAPA102DataChannel pbapa102DataChannel;
+                pbapa102DataChannel.pixels = channel.pixels;
+                pbapa102DataChannel.frequency = channel.frequency;
+                pbapa102DataChannel.colorOrders = channel.colorOrders;
+                Serial1.write((uint8_t *) &pbapa102DataChannel, sizeof(pbapa102DataChannel));
+                crc = crc_update(crc, &pbapa102DataChannel, sizeof(pbapa102DataChannel));
+                channelSwitchCallback(&channel);
+                rgbFrameInitBytes[0] = rgbFrameInitBytes[1] = rgbFrameInitBytes[2] = 0;
+                rgbFrameInitBytes[3] = 0x1f; //default to brightest black
+                break;
+            }
+            case CHANNEL_APA102_CLOCK: {
+                PBAPA102ClockChannel pbapa102ClockChannel;
+                pbapa102ClockChannel.frequency = channel.frequency;
+                Serial1.write((uint8_t *) &pbapa102ClockChannel, sizeof(pbapa102ClockChannel));
+                crc = crc_update(crc, &pbapa102ClockChannel, sizeof(pbapa102ClockChannel));
+                channel.pixels = 0; //make sure we don't send pixel data, even if misconfigured
+                break;
+            }
+            default:
+                channel.pixels = 0; //make sure we don't send pixel data, even if misconfigured
+        }
 
         curPixel = channel.startIndex;
-        for (int i = 0; i < channel.header.pixels; i++) {
-            cb(curPixel++, rgb);
-            Serial1.write(rgb, channel.header.numElements);
-            crc = crc_update(crc, rgb, channel.header.numElements);
+        for (int i = 0; i < channel.pixels; i++) {
+            rgbFrame = rgbFrameInit;
+            renderCallback(curPixel++, rgb);
+            Serial1.write(rgb, channel.numElements);
+            crc = crc_update(crc, rgb, channel.numElements);
             total++;
         }
         crc = crc ^0xffffffff;
@@ -89,11 +156,11 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
 //    Serial.print(total);
 //    Serial.println(" pixels rendered");
 
-    header.channel = 0xff;
-    header.recordType = DRAW_ALL;
+    frameHeader.channel = 0xff;
+    frameHeader.recordType = CHANNEL_DRAW_ALL;
     uint32_t crc = 0xffffffff;
-    Serial1.write((uint8_t *) &header, sizeof(header));
-    crc = crc_update(crc, &header, sizeof(header));
+    Serial1.write((uint8_t *) &frameHeader, sizeof(frameHeader));
+    crc = crc_update(crc, &frameHeader, sizeof(frameHeader));
     crc = crc ^0xffffffff;
     Serial1.write((uint8_t *) &crc, 4);
 

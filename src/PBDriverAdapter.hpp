@@ -9,16 +9,24 @@
 #include <memory>
 #include <vector>
 
-typedef struct {
-    uint8_t numElements; //0 to disable channel, usually 3 or 4
-    uint8_t redi :2, greeni :2, bluei :2, whitei :2; //color orders, data on the line assumed to be RGB or RGBW
-    uint16_t pixels;
-} PBChannelHeader;
+
+enum ChannelType {
+    CHANNEL_WS2812 = 1, CHANNEL_DRAW_ALL, CHANNEL_APA102_DATA, CHANNEL_APA102_CLOCK
+};
 
 typedef struct {
-    PBChannelHeader header;
-    uint16_t startIndex;
     uint8_t channelId;
+    uint8_t channelType;
+    uint8_t numElements; //usually 3 or 4 if configurable. zero to disable channel
+    union {
+        struct {
+            uint8_t redi :2, greeni :2, bluei :2, whitei :2; //color orders, data on the line assumed to be RGB or RGBW
+        };
+        uint8_t colorOrders;
+    };
+    uint16_t pixels;
+    uint16_t startIndex;
+    uint32_t frequency;
 } PBChannel;
 
 
@@ -28,7 +36,7 @@ public:
     void end();
     void configureChannels(std::unique_ptr<std::vector<PBChannel>> channels);
     std::vector<PBChannel> getChannelConfig();
-    void show(uint16_t numPixels, std::function<void(uint16_t index, uint8_t rgbw[])> cb);
+    void show(uint16_t numPixels, std::function<void(uint16_t index, uint8_t rgbw[])> renderCallback, std::function<void(PBChannel *)> channelSwitchCallback);
 private:
     unsigned long timer;
     std::unique_ptr<std::vector<PBChannel>> channels;
