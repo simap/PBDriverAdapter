@@ -82,7 +82,8 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         uint8_t rgbFrameInitBytes[4];
     };
 
-    while (micros() - timer < 300)
+    //give time for ws2812 to latch since the last draw command in case we get here again quickly
+    while (micros() - timer < 310)
         yield();
 
     if (!channels)
