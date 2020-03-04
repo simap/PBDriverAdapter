@@ -38,6 +38,8 @@ public:
     std::vector<PBChannel> getChannelConfig();
     void show(uint16_t numPixels, std::function<void(uint16_t index, uint8_t rgbw[])> renderCallback, std::function<void(PBChannel *)> channelSwitchCallback);
 private:
+    void write(const uint8_t *buffer, size_t size);
+    void flush();
     unsigned long timer;
     std::unique_ptr<std::vector<PBChannel>> channels;
 };

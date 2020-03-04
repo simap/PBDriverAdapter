@@ -61,8 +61,13 @@ uint32_t crc_update(uint32_t crc, const void *data, size_t data_len) {
 
 
 void PBDriverAdapter::begin(uint32_t uartFrequency) {
-    Serial1.flush();
+    flush();
+#ifdef ESP8266
     Serial1.begin(uartFrequency, SERIAL_8N1, SERIAL_TX_ONLY);
+#endif
+#ifdef ESP32
+    Serial1.begin(uartFrequency, SERIAL_8N1, -1, 23);
+#endif
     timer = micros();
 }
 
@@ -146,24 +151,25 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         for (int i = 0; i < channel.pixels; i++) {
             rgbFrame = rgbFrameInit;
             renderCallback(curPixel++, rgb);
-            Serial1.write(rgb, channel.numElements);
+            write(rgb, channel.numElements);
             crc = crc_update(crc, rgb, channel.numElements);
             total++;
         }
         crc = crc ^0xffffffff;
-        Serial1.write((uint8_t *) &crc, 4);
+        write((uint8_t *) &crc, 4);
     }
+
 
     frameHeader.channel = 0xff;
     frameHeader.recordType = CHANNEL_DRAW_ALL;
     uint32_t crc = 0xffffffff;
-    Serial1.write((uint8_t *) &frameHeader, sizeof(frameHeader));
+    write((uint8_t *) &frameHeader, sizeof(frameHeader));
     crc = crc_update(crc, &frameHeader, sizeof(frameHeader));
     crc = crc ^0xffffffff;
-    Serial1.write((uint8_t *) &crc, 4);
+    write((uint8_t *) &crc, 4);
 
     yield();
-    Serial1.flush();
+    flush();
     timer = micros();
 }
 
@@ -173,4 +179,11 @@ void PBDriverAdapter::configureChannels(std::unique_ptr<std::vector<PBChannel>> 
 
 std::vector<PBChannel> PBDriverAdapter::getChannelConfig() {
     return *this->channels;
+}
+
+void PBDriverAdapter::write(const uint8_t *buffer, size_t size) {
+    Serial1.write(buffer, size);
+}
+void PBDriverAdapter::flush() {
+    Serial1.flush();
 }
