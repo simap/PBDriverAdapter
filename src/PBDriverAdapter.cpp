@@ -154,9 +154,6 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         Serial1.write((uint8_t *) &crc, 4);
     }
 
-//    Serial.print(total);
-//    Serial.println(" pixels rendered");
-
     frameHeader.channel = 0xff;
     frameHeader.recordType = CHANNEL_DRAW_ALL;
     uint32_t crc = 0xffffffff;
