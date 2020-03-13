@@ -157,6 +157,10 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         }
         crc = crc ^0xffffffff;
         write((uint8_t *) &crc, 4);
+
+#if defined(ESP8266) || defined(ESP32)
+        yield();
+#endif
     }
 
 
