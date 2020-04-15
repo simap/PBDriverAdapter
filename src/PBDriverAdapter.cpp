@@ -106,7 +106,7 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         uint32_t crc = 0xffffffff;
         frameHeader.channel = channel.channelId;
         frameHeader.recordType = channel.channelType;
-        Serial1.write((uint8_t *) &frameHeader, sizeof(frameHeader));
+        write((uint8_t *) &frameHeader, sizeof(frameHeader));
         crc = crc_update(crc, &frameHeader, sizeof(frameHeader));
 
         switch (channel.channelType) {
@@ -116,7 +116,7 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
                 pbws2812Channel.numElements = channel.numElements;
                 pbws2812Channel.pixels = channel.pixels;
                 pbws2812Channel.colorOrders = channel.colorOrders;
-                Serial1.write((uint8_t *) &pbws2812Channel, sizeof(pbws2812Channel));
+                write((uint8_t *) &pbws2812Channel, sizeof(pbws2812Channel));
                 crc = crc_update(crc, &pbws2812Channel, sizeof(pbws2812Channel));
                 channelSwitchCallback(&channel);
                 rgbFrameInit = 0; //default to black
@@ -128,7 +128,7 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
                 pbapa102DataChannel.pixels = channel.pixels;
                 pbapa102DataChannel.frequency = channel.frequency;
                 pbapa102DataChannel.colorOrders = channel.colorOrders;
-                Serial1.write((uint8_t *) &pbapa102DataChannel, sizeof(pbapa102DataChannel));
+                write((uint8_t *) &pbapa102DataChannel, sizeof(pbapa102DataChannel));
                 crc = crc_update(crc, &pbapa102DataChannel, sizeof(pbapa102DataChannel));
                 channelSwitchCallback(&channel);
                 rgbFrameInitBytes[0] = rgbFrameInitBytes[1] = rgbFrameInitBytes[2] = 0;
@@ -138,7 +138,7 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
             case CHANNEL_APA102_CLOCK: {
                 PBAPA102ClockChannel pbapa102ClockChannel;
                 pbapa102ClockChannel.frequency = channel.frequency;
-                Serial1.write((uint8_t *) &pbapa102ClockChannel, sizeof(pbapa102ClockChannel));
+                write((uint8_t *) &pbapa102ClockChannel, sizeof(pbapa102ClockChannel));
                 crc = crc_update(crc, &pbapa102ClockChannel, sizeof(pbapa102ClockChannel));
                 channel.pixels = 0; //make sure we don't send pixel data, even if misconfigured
                 break;
