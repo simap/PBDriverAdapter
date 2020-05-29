@@ -87,7 +87,7 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         uint8_t rgbFrameInitBytes[4];
     };
 
-    //give time for ws2812 to latch since the last draw command in case we get here again quickly
+    //give time for ws2812/ws2813 to latch since the last draw command in case we get here again quickly
     while (micros() - timer < 310)
         yield();
 
@@ -99,9 +99,17 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
     memcpy_P(frameHeader.magic, F("UPXL"), 4);
 
     int total = 0;
+    unsigned long drawBusyTimer = micros();
     for (auto channel : *channels) {
         if (!channel.numElements)
             return;
+
+#if defined(ESP8266) || defined(ESP32)
+        if (micros() - drawBusyTimer > 50000) {
+            yield(); //give things a little cpu in between channels, if we've been busy
+            drawBusyTimer = micros();
+        }
+#endif
 
         uint32_t crc = 0xffffffff;
         frameHeader.channel = channel.channelId;
@@ -157,12 +165,7 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
         }
         crc = crc ^0xffffffff;
         write((uint8_t *) &crc, 4);
-
-#if defined(ESP8266) || defined(ESP32)
-        yield();
-#endif
     }
-
 
     frameHeader.channel = 0xff;
     frameHeader.recordType = CHANNEL_DRAW_ALL;
@@ -172,7 +175,6 @@ void PBDriverAdapter::show(uint16_t numPixels, std::function<void(uint16_t index
     crc = crc ^0xffffffff;
     write((uint8_t *) &crc, 4);
 
-    yield();
     flush();
     timer = micros();
 }
